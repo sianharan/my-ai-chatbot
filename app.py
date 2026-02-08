@@ -21,7 +21,10 @@ def load_data_and_model():
         df = pd.read_excel(file_name)
         all_policies = ""
         for i, row in df.iterrows():
-            all_policies += f"[{i+1}번 제안] 제목: {str(row['제목'])} / 내용: {str(row['내용'])}\n\n"
+        title = str(row['제목'])
+        content = str(row['내용'])
+        # 아래 줄 끝에 " (따옴표)와 \n\n" (따옴표)가 정확히 있는지 확인하세요.
+        all_policies += f"[{i+1}번 제안] 제목: {title} / 내용: {content}\n\n"
 
 "
         model = genai.GenerativeModel('gemini-flash-latest')
