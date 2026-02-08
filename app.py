@@ -12,8 +12,8 @@ st.info("데이터를 기반으로 정책 제안을 정밀 분석합니다.")
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
     
-    # [핵심] v1beta 주소 문제를 해결하기 위해 v1 정식 주소를 강제로 사용하게 합니다.
-    # transport='rest' 설정은 API 통신 규격을 가장 안정적인 방식으로 고정합니다.
+    # [핵심] v1beta 주소 문제를 해결하기 위해 v1 정식 주소를 사용하게 합니다.
+    # transport='rest' 설정은 통신 규격을 가장 안정적인 방식으로 고정합니다.
     genai.configure(api_key=api_key, transport='rest')
     
     try:
@@ -62,20 +62,16 @@ if prompt := st.chat_input("질문을 입력하세요"):
 
     try:
         with st.chat_message("assistant"):
-            # 전문가 프롬프트 구성
             full_prompt = f"데이터를 참고해 답해줘.\n[데이터]\n{policy_text}\n[질문]\n{prompt}"
             
-            # API 버전을 강제로 인식시키기 위해 
-            # 내부적인 주소 체계 문제를 우회하는 호출 방식을 사용합니다.
+            # API 호출 시점에 오류가 발생하면 출력합니다.
             response = model.generate_content(full_prompt)
             
             if response and response.text:
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             else:
-                st.error("AI 응답을 생성할 수 없습니다. 모델 이름을 확인하세요.")
+                st.error("AI 응답을 생성할 수 없습니다.")
                 
     except Exception as e:
-        # 만약 여전히 v1beta 메시지가 뜬다면, 서버에 구형 라이브러리가 깔려있는 것입니다.
         st.error(f"오류 발생: {e}")
-        st.warning("도움말: GitHub의 requirements.txt 파일에 google-generativeai==0.8.3 가 있는지 꼭 확인하세요.")
