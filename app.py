@@ -8,16 +8,16 @@ st.set_page_config(page_title="교육 정책 분석 전문가", layout="wide")
 st.title("🤖 교육 정책 분석 전문가 챗봇")
 st.info("엑셀 데이터를 기반으로 정책 제안을 정밀 분석합니다.")
 
-# 2. Secrets 보안 설정 및 API 버전 강제 고정
+# 2. Secrets 보안 설정
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
     
-    # [핵심 수정] transport를 'rest'로 설정하고, 
-    # 내부적으로 v1beta가 아닌 v1 주소를 사용하도록 강제합니다.
+    # [가장 중요한 수정] 
+    # transport='rest'를 설정하여 HTTP 통신 방식으로 강제하고 최신 라이브러리 규격을 따릅니다.
     genai.configure(api_key=api_key, transport='rest')
     
     try:
-        # 모델 객체 생성 시점에 이름을 명확히 전달합니다.
+        # 모델 객체 생성 - 버전 충돌 방지를 위해 이름만 정확히 기입합니다.
         model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
         st.error(f"모델 설정 중 오류 발생: {e}")
@@ -29,7 +29,7 @@ else:
 @st.cache_data
 def load_policy_data(file_name):
     if not os.path.exists(file_name):
-        return None, f"'{file_name}' 파일을 찾을 수 없습니다. GitHub에 업로드했는지 확인하세요."
+        return None, f"'{file_name}' 파일을 찾을 수 없습니다. GitHub 업로드 여부를 확인하세요."
     
     try:
         df = pd.read_excel(file_name)
@@ -42,7 +42,7 @@ def load_policy_data(file_name):
     except Exception as e:
         return None, f"데이터 분석 중 오류 발생: {e}"
 
-# 엑셀 파일명 확인 (GitHub에 올린 파일명과 정확히 일치해야 함)
+# 엑셀 파일명 (GitHub에 올린 파일명과 일치해야 함)
 policy_text, error_msg = load_policy_data("정책제안_6개월.xlsx")
 
 if error_msg:
@@ -77,13 +77,14 @@ if prompt := st.chat_input("정책에 대해 궁금한 점을 질문해 보세�
 [질문]
 {prompt}"""
             
-            # [핵심 수정] generate_content 호출 시점에 API 버전을 v1으로 한 번 더 강제합니다.
+            # AI 답변 생성
             response = model.generate_content(full_prompt)
             
-            if response:
+            if response and response.text:
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
+            else:
+                st.error("AI로부터 응답을 받지 못했습니다. API 키나 모델 설정을 확인해 주세요.")
             
     except Exception as e:
-        # 오류 메시지에 v1beta가 포함되어 있다면, 이는 라이브러리 버전 문제입니다.
         st.error(f"분석 중 오류가 발생했습니다: {e}")
