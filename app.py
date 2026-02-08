@@ -1,74 +1,62 @@
-
 import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 
-# API 키 설정 (보안을 위해 환경 변수 사용을 권장하지만, 예시를 위해 직접 입력)
-MY_API_KEY = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=MY_API_KEY)
+# 페이지 설정
+st.set_page_config(page_title="AI 정책 분석 전문가", layout="wide")
 
-st.title('정책 제안 챗봇')
+st.title("🤖 교육 정책 분석 전문가 챗봇")
+st.info("엑셀 데이터를 바탕으로 인공지능이 정책 제안을 분석해 드립니다.")
 
-# 'chat_history'가 세션 상태에 없으면 빈 리스트로 초기화합니다.
-if 'chat_history' not in st.session_state:
-    st.session_state.chat_history = []
+# 사이드바 설정
+st.sidebar.header("설정")
+user_api_key = st.sidebar.text_input("Gemini API Key 입력", type="password")
 
-# 데이터 로드 및 전처리 (Streamlit 앱이 시작될 때 한 번만 실행)
+# 엑셀 파일 로드 (사전에 GitHub에 올린 파일명과 일치해야 함)
+file_path = "정책제안_6개월.xlsx"
+
 @st.cache_data
-def load_data_and_model():
-    file_name = '정책제안_6개월.xlsx'
+def load_data(path):
     try:
-        df = pd.read_excel(file_name)
-        all_policies = ""
+        df = pd.read_excel(path)
+        all_text = ""
         for i, row in df.iterrows():
-        title = str(row['제목'])
-        content = str(row['내용'])
-        # 아래 줄 끝에 " (따옴표)와 \n\n" (따옴표)가 정확히 있는지 확인하세요.
-        all_policies += f"[{i+1}번 제안] 제목: {title} / 내용: {content}\n\n"
-
-"
-        model = genai.GenerativeModel('gemini-flash-latest')
-        return all_policies, model
+            title = str(row['제목'])
+            content = str(row['내용'])
+            # 아래 줄이 오류가 났던 부분입니다. 따옴표 짝을 완벽히 맞췄습니다.
+            all_text += f"[{i+1}번 제안] 제목: {title} / 내용: {content}\n\n"
+        return all_text
     except Exception as e:
-        st.error(f"❌ 데이터 또는 모델 로드 오류 발생: {e}")
-        return None, None
+        return f"파일 로드 오류: {e}"
 
-all_policies, model = load_data_and_model()
+all_policies = load_data(file_path)
 
-# 대화 기록 표시
-for message in st.session_state.chat_history:
-    with st.chat_message(message['role']):
-        st.write(message['content'])
+# 채팅 인터페이스
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# 사용자 입력 필드 생성
-prompt = st.chat_input('정책 제안에 대해 궁금한 점을 질문해주세요.')
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-if prompt and all_policies and model: # 사용자가 메시지를 입력했고, 데이터와 모델이 준비되었을 경우
-    st.session_state.chat_history.append({'role': 'user', 'content': prompt})
-    with st.chat_message('user'):
-        st.write(prompt)
+if prompt := st.chat_input("정책에 대해 궁금한 점을 물어보세요!"):
+    if not user_api_key:
+        st.error("사이드바에 Gemini API Key를 먼저 입력해 주세요!")
+    else:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-    # Gemini 모델을 사용하여 응답 생성
-    with st.chat_message('assistant'):
-        with st.spinner('AI 정책 분석관이 답변을 생성 중입니다...'):
-            # 기존에 로드된 all_policies 데이터를 활용하여 프롬프트 구성
-            context_prompt = f"""당신은 교육 정책 전문가입니다. 다음 정책 제안 데이터를 기반으로 사용자의 질문에 답변하세요.
-            가능하다면 [n번 제안] 형식을 사용하여 특정 제안을 언급해주세요.
-
-            [정책 제안 데이터]
-            {all_policies}
-
-            [사용자 질문]
-            {prompt}"""
-
-            try:
-                response = model.generate_content(context_prompt)
-                ai_response = response.text
-                st.write(ai_response)
-                st.session_state.chat_history.append({'role': 'assistant', 'content': ai_response})
-            except Exception as e:
-                st.error(f"❌ AI 응답 생성 실패: {e}")
-                st.session_state.chat_history.append({'role': 'assistant', 'content': '죄송합니다. 답변을 생성하는 데 문제가 발생했습니다.'})
-elif prompt and (not all_policies or not model):
-    st.error("❌ 챗봇이 아직 준비되지 않았습니다. 데이터를 로드하거나 모델을 초기화하는 데 문제가 발생했을 수 있습니다.")
-    st.session_state.chat_history.append({'role': 'assistant', 'content': '죄송합니다. 챗봇이 준비되지 않아 답변을 생성할 수 없습니다.'})
+        try:
+            genai.configure(api_key=user_api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # AI에게 줄 명령 생성
+            full_prompt = f"너는 정책 분석 전문가야. 다음 데이터를 바탕으로 질문에 답해줘.\n\n[데이터]\n{all_policies}\n\n[질문]\n{prompt}"
+            
+            with st.chat_message("assistant"):
+                response = model.generate_content(full_prompt)
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+        except Exception as e:
+            st.error(f"분석 중 오류가 발생했습니다: {e}")
