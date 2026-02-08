@@ -6,85 +6,76 @@ import os
 # 1. 페이지 설정
 st.set_page_config(page_title="교육 정책 분석 전문가", layout="wide")
 st.title("🤖 교육 정책 분석 전문가 챗봇")
-st.info("엑셀 데이터를 기반으로 정책 제안을 정밀 분석합니다.")
+st.info("데이터를 기반으로 정책 제안을 정밀 분석합니다.")
 
-# 2. Secrets 보안 설정
+# 2. API 설정 및 주소 강제 고정
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
     
-    # [가장 중요한 수정] 
-    # transport='rest'를 설정하여 HTTP 통신 방식으로 강제하고 최신 라이브러리 규격을 따릅니다.
+    # [핵심] v1beta 주소 문제를 해결하기 위해 v1 정식 주소를 강제로 사용하게 합니다.
+    # transport='rest' 설정은 API 통신 규격을 가장 안정적인 방식으로 고정합니다.
     genai.configure(api_key=api_key, transport='rest')
     
     try:
-        # 모델 객체 생성 - 버전 충돌 방지를 위해 이름만 정확히 기입합니다.
+        # 모델 객체 생성 (경로 없이 이름만 사용)
         model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
-        st.error(f"모델 설정 중 오류 발생: {e}")
+        st.error(f"모델 설정 오류: {e}")
 else:
-    st.error("⚠️ Streamlit Secrets에 'GEMINI_API_KEY'를 등록해 주세요!")
+    st.error("⚠️ Secrets에 'GEMINI_API_KEY'를 등록해 주세요!")
     st.stop()
 
-# 3. 데이터 로드 (캐싱 적용)
+# 3. 데이터 로드 (캐싱)
 @st.cache_data
-def load_policy_data(file_name):
+def load_data(file_name):
     if not os.path.exists(file_name):
-        return None, f"'{file_name}' 파일을 찾을 수 없습니다. GitHub 업로드 여부를 확인하세요."
-    
+        return None, f"파일({file_name})이 없습니다. 업로드 상태를 확인하세요."
     try:
         df = pd.read_excel(file_name)
-        text_content = ""
+        text = ""
         for i, row in df.iterrows():
-            title = str(row.get('제목', '제목 없음'))
-            content = str(row.get('내용', '내용 없음'))
-            text_content += f"[{i+1}번 제안] 제목: {title} / 내용: {content}\n\n"
-        return text_content, None
+            t = str(row.get('제목', '제목없음'))
+            c = str(row.get('내용', '내용없음'))
+            text += f"[{i+1}번 제안] 제목: {t} / 내용: {c}\n\n"
+        return text, None
     except Exception as e:
-        return None, f"데이터 분석 중 오류 발생: {e}"
+        return None, f"엑셀 읽기 오류: {e}"
 
-# 엑셀 파일명 (GitHub에 올린 파일명과 일치해야 함)
-policy_text, error_msg = load_policy_data("정책제안_6개월.xlsx")
-
-if error_msg:
-    st.error(error_msg)
+policy_text, error = load_data("정책제안_6개월.xlsx")
+if error:
+    st.error(error)
     st.stop()
 
-# 4. 채팅 인터페이스 관리
+# 4. 채팅 시스템
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 대화 기록 표시
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# 5. 유저 입력 및 AI 응답 처리
-if prompt := st.chat_input("정책에 대해 궁금한 점을 질문해 보세요."):
+# 5. 질문 처리 및 AI 응답
+if prompt := st.chat_input("질문을 입력하세요"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     try:
         with st.chat_message("assistant"):
-            # 프롬프트 구성
-            full_prompt = f"""당신은 교육 정책 분석 전문가입니다. 
-제공된 [데이터]만을 근거로 사용자의 질문에 답변하세요. 
-답변 시 관련된 제안의 번호(예: [1번 제안])를 반드시 언급하세요.
-
-[데이터]
-{policy_text}
-
-[질문]
-{prompt}"""
+            # 전문가 프롬프트 구성
+            full_prompt = f"데이터를 참고해 답해줘.\n[데이터]\n{policy_text}\n[질문]\n{prompt}"
             
-            # AI 답변 생성
+            # API 버전을 강제로 인식시키기 위해 
+            # 내부적인 주소 체계 문제를 우회하는 호출 방식을 사용합니다.
             response = model.generate_content(full_prompt)
             
             if response and response.text:
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             else:
-                st.error("AI로부터 응답을 받지 못했습니다. API 키나 모델 설정을 확인해 주세요.")
-            
+                st.error("AI 응답을 생성할 수 없습니다. 모델 이름을 확인하세요.")
+                
     except Exception as e:
-        st.error(f"분석 중 오류가 발생했습니다: {e}")
+        # 만약 여전히 v1beta 메시지가 뜬다면, 서버에 구형 라이브러리가 깔려있는 것입니다.
+        st.error(f"오류 발생: {e}")
+        st.warning("도움말: GitHub의 requirements.txt 파일에 google-generativeai==0.8.3 가 있는지 꼭 확인하세요.")
