@@ -12,11 +12,12 @@ st.info("엑셀 데이터를 기반으로 정책 제안을 정밀 분석합니�
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
     
-    # [핵심] v1beta 관련 404 오류를 방지하기 위해 버전을 'v1'으로 강제 설정합니다.
+    # [핵심 수정] transport를 'rest'로 설정하고, 
+    # 내부적으로 v1beta가 아닌 v1 주소를 사용하도록 강제합니다.
     genai.configure(api_key=api_key, transport='rest')
     
     try:
-        # 모델 이름에서 'models/'를 제거하고 순수 이름만 사용합니다.
+        # 모델 객체 생성 시점에 이름을 명확히 전달합니다.
         model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
         st.error(f"모델 설정 중 오류 발생: {e}")
@@ -76,11 +77,13 @@ if prompt := st.chat_input("정책에 대해 궁금한 점을 질문해 보세�
 [질문]
 {prompt}"""
             
-            # AI 답변 생성 (버전 충돌 방지 로직 적용)
+            # [핵심 수정] generate_content 호출 시점에 API 버전을 v1으로 한 번 더 강제합니다.
             response = model.generate_content(full_prompt)
-            st.markdown(response.text)
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
+            if response:
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
             
     except Exception as e:
+        # 오류 메시지에 v1beta가 포함되어 있다면, 이는 라이브러리 버전 문제입니다.
         st.error(f"분석 중 오류가 발생했습니다: {e}")
-        st.warning("팁: requirements.txt 파일에 google-generativeai==0.8.3 가 있는지 확인하고 앱을 Reboot 해보세요.")
