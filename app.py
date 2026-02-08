@@ -21,7 +21,7 @@ def load_data_and_model():
         df = pd.read_excel(file_name)
         all_policies = ""
         for i, row in df.iterrows():
-            all_policies += f"[{i+1}번 제안] 제목: {str(row['제목'])} / 내용: {str(row['내용'])}
+            all_policies += f"[{i+1}번 제안] 제목: {str(row['제목'])} / 내용: {str(row['내용'])}\n\n"
 
 "
         model = genai.GenerativeModel('gemini-flash-latest')
